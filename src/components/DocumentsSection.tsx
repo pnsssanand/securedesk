@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -38,7 +37,11 @@ interface Document {
   createdAt: Date;
 }
 
-const DocumentsSection: React.FC = () => {
+interface DocumentsSectionProps {
+  user: { id: string; name: string; email: string; };
+}
+
+const DocumentsSection: React.FC<DocumentsSectionProps> = ({ user }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState('all');

@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,7 +21,7 @@ import {
 } from 'lucide-react';
 
 interface SettingsSectionProps {
-  user: { name: string; email: string; };
+  user: { id: string; name: string; email: string; };
   onLogout: () => void;
 }
 

@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,7 +27,16 @@ import BankDetailsSection from './BankDetailsSection';
 import SettingsSection from './SettingsSection';
 
 interface DashboardProps {
-  user: { name: string; email: string; };
+  user: { id: string; name: string; email: string; };
+  onLogout: () => void;
+}
+
+// Define types for section components used in the dashboard
+interface SectionProps {
+  user: { id: string; name: string; email: string; };
+}
+
+interface SettingsSectionProps extends SectionProps {
   onLogout: () => void;
 }
 
@@ -52,12 +60,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
 
   const renderContent = () => {
     switch (activeSection) {
-      case 'vault': return <VaultSection />;
-      case 'cards': return <CardsSection />;
-      case 'documents': return <DocumentsSection />;
-      case 'bank': return <BankDetailsSection />;
+      case 'vault': return <VaultSection user={user} />;
+      case 'cards': return <CardsSection user={user} />;
+      case 'documents': return <DocumentsSection user={user} />;
+      case 'bank': return <BankDetailsSection user={user} />;
       case 'settings': return <SettingsSection user={user} onLogout={onLogout} />;
-      default: return <VaultSection />;
+      default: return <VaultSection user={user} />;
     }
   };
 
@@ -225,3 +233,5 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
 };
 
 export default Dashboard;
+
+

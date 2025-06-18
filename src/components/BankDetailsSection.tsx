@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,7 +34,11 @@ interface BankDetail {
   createdAt: Date;
 }
 
-const BankDetailsSection: React.FC = () => {
+interface BankDetailsSectionProps {
+  user: { id: string; name: string; email: string; };
+}
+
+const BankDetailsSection: React.FC<BankDetailsSectionProps> = ({ user }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [visibleDetails, setVisibleDetails] = useState<string[]>([]);
 

@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Eye, EyeOff, Copy, Edit, Trash2, Globe, Shield, RefreshCw } from 'lucide-react';
 import { useToast } from '@/contexts/ToastContext';
+import { savePassword, getAllPasswords, updatePassword, deletePassword } from '@/services/database';
 
 interface PasswordEntry {
   id: string;
@@ -20,41 +20,13 @@ interface PasswordEntry {
   lastModified: Date;
 }
 
-const VaultSection = () => {
-  const { showSuccess, showError, showSecurity } = useToast();
-  const [passwords, setPasswords] = useState<PasswordEntry[]>([
-    {
-      id: '1',
-      title: 'Google Account',
-      url: 'https://accounts.google.com',
-      username: 'john.doe@gmail.com',
-      password: 'MyStr0ngP@ssw0rd123',
-      notes: 'Main Google account',
-      strength: 'strong',
-      lastModified: new Date('2024-01-15')
-    },
-    {
-      id: '2',
-      title: 'Facebook',
-      url: 'https://facebook.com',
-      username: 'john.doe@gmail.com',
-      password: 'facebook123',
-      notes: 'Social media account',
-      strength: 'weak',
-      lastModified: new Date('2024-01-10')
-    },
-    {
-      id: '3',
-      title: 'Banking App',
-      url: 'https://mybank.com',
-      username: 'johndoe123',
-      password: 'Bank@2024#Secure',
-      notes: 'Primary banking account',
-      strength: 'strong',
-      lastModified: new Date('2024-01-20')
-    }
-  ]);
+interface VaultSectionProps {
+  user: { id: string; name: string; email: string; };
+}
 
+const VaultSection: React.FC<VaultSectionProps> = ({ user }) => {
+  const { showSuccess, showError, showSecurity } = useToast();
+  const [passwords, setPasswords] = useState<PasswordEntry[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPassword, setEditingPassword] = useState<PasswordEntry | null>(null);
   const [showPasswords, setShowPasswords] = useState<{[key: string]: boolean}>({});
@@ -66,6 +38,32 @@ const VaultSection = () => {
     password: '',
     notes: ''
   });
+
+  // Fetch passwords on component mount
+  useEffect(() => {
+    const loadPasswords = async () => {
+      try {
+        const dbPasswords = await getAllPasswords(user.id);
+        // Transform the database passwords to match our component's PasswordEntry interface
+        const transformedPasswords = dbPasswords.map(pwd => ({
+          id: pwd.id,
+          title: pwd.title,
+          url: pwd.url || '',
+          username: pwd.username,
+          password: pwd.password,
+          notes: pwd.notes || '',
+          strength: pwd.strength as 'weak' | 'medium' | 'strong',
+          lastModified: new Date(pwd.updatedAt)
+        }));
+        setPasswords(transformedPasswords);
+      } catch (error) {
+        console.error('Failed to load passwords:', error);
+        showError('Load Failed', 'Could not load your passwords');
+      }
+    };
+    
+    loadPasswords();
+  }, [user.id]);
 
   const generatePassword = () => {
     const length = 16;
@@ -93,34 +91,73 @@ const VaultSection = () => {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.title || !formData.username || !formData.password) {
       showError('Missing Fields', 'Please fill in all required fields');
       return;
     }
 
-    const passwordEntry: PasswordEntry = {
-      id: editingPassword?.id || Date.now().toString(),
-      title: formData.title,
-      url: formData.url,
-      username: formData.username,
-      password: formData.password,
-      notes: formData.notes,
-      strength: checkPasswordStrength(formData.password),
-      lastModified: new Date()
-    };
+    try {
+      if (editingPassword) {
+        // Update existing password
+        await updatePassword(
+          editingPassword.id,
+          formData.title,
+          formData.username,
+          formData.password,
+          formData.url,
+          formData.notes,
+          null, // folderId
+          user.id // Add user.id
+        );
+        
+        // Update local state
+        setPasswords(prev => prev.map(p => p.id === editingPassword.id ? {
+          ...p,
+          title: formData.title,
+          username: formData.username,
+          password: formData.password,
+          url: formData.url,
+          notes: formData.notes,
+          strength: checkPasswordStrength(formData.password),
+          lastModified: new Date()
+        } : p));
+        
+        showSuccess('Updated!', 'Password entry updated successfully');
+      } else {
+        // Save new password
+        const result = await savePassword(
+          formData.title,
+          formData.username,
+          formData.password,
+          formData.url,
+          formData.notes,
+          null, // folderId
+          user.id // Add user.id
+        );
+        
+        // Add to local state
+        setPasswords(prev => [...prev, {
+          id: result.id,
+          title: formData.title,
+          username: formData.username,
+          password: formData.password,
+          url: formData.url,
+          notes: formData.notes,
+          strength: checkPasswordStrength(formData.password),
+          lastModified: new Date()
+        }]);
+        
+        showSuccess('Saved!', 'New password entry saved securely');
+      }
 
-    if (editingPassword) {
-      setPasswords(prev => prev.map(p => p.id === editingPassword.id ? passwordEntry : p));
-      showSuccess('Updated!', 'Password entry updated successfully');
-    } else {
-      setPasswords(prev => [...prev, passwordEntry]);
-      showSuccess('Saved!', 'New password entry saved securely');
+      setIsDialogOpen(false);
+      setEditingPassword(null);
+      setFormData({ title: '', url: '', username: '', password: '', notes: '' });
+    } catch (error) {
+      console.error('Failed to save password:', error);
+      showError('Save Failed', 'Could not save your password');
     }
-
-    setIsDialogOpen(false);
-    setEditingPassword(null);
-    setFormData({ title: '', url: '', username: '', password: '', notes: '' });
   };
 
   const handleEdit = (password: PasswordEntry) => {
@@ -135,9 +172,15 @@ const VaultSection = () => {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = (id: string) => {
-    setPasswords(prev => prev.filter(p => p.id !== id));
-    showSecurity('Deleted', 'Password entry removed from vault');
+  const handleDelete = async (id: string) => {
+    try {
+      await deletePassword(id, user.id);
+      setPasswords(prev => prev.filter(p => p.id !== id));
+      showSecurity('Deleted', 'Password entry removed from vault');
+    } catch (error) {
+      console.error('Failed to delete password:', error);
+      showError('Delete Failed', 'Could not delete the password entry');
+    }
   };
 
   const togglePasswordVisibility = (id: string) => {

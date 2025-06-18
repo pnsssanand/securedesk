@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,7 +9,7 @@ import { useToast } from '@/contexts/ToastContext';
 
 interface LandingPageProps {
   onLogin: (email: string, password: string) => void;
-  onSignup: () => void;
+  onSignup: (email: string, password: string, name: string) => void;
 }
 
 const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup }) => {
@@ -34,11 +33,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup }) => {
         return;
       }
       
-      // Demo login - accept any email/password
-      showSuccess('Welcome Back!', 'Successfully logged into SecureDesk');
-      setTimeout(() => {
-        onLogin(formData.email, formData.password);
-      }, 1000);
+      onLogin(formData.email, formData.password);
     } else {
       if (!formData.email || !formData.password || !formData.confirmPassword) {
         showError('Missing Information', 'Please fill in all required fields');
@@ -55,9 +50,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup }) => {
         return;
       }
       
-      showSuccess('Account Created!', 'Welcome to SecureDesk! Please sign in.');
-      setIsLogin(true);
-      setFormData(prev => ({ ...prev, confirmPassword: '', acceptTerms: false }));
+      // Use the user's email as the name if no name is provided
+      const name = formData.email.split('@')[0];
+      onSignup(formData.email, formData.password, name);
     }
   };
 
@@ -290,3 +285,5 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onSignup }) => {
 };
 
 export default LandingPage;
+
+
