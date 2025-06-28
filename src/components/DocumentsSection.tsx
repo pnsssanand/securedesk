@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +22,8 @@ import {
   CreditCard,
   Car,
   User,
-  Globe
+  Globe,
+  X
 } from 'lucide-react';
 
 interface Document {
@@ -46,6 +47,22 @@ const DocumentsSection: React.FC<DocumentsSectionProps> = ({ user }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState('all');
   const [visibleNumbers, setVisibleNumbers] = useState<string[]>([]);
+  
+  // Add state for form data
+  const [formData, setFormData] = useState({
+    type: 'aadhaar',
+    name: '',
+    documentNumber: '',
+    expiryDate: '',
+    frontImage: null as File | null,
+    backImage: null as File | null,
+    frontImagePreview: '',
+    backImagePreview: '',
+  });
+
+  // Refs for file inputs
+  const frontImageInputRef = useRef<HTMLInputElement>(null);
+  const backImageInputRef = useRef<HTMLInputElement>(null);
 
   // Sample data
   const [documents, setDocuments] = useState<Document[]>([
@@ -138,6 +155,86 @@ const DocumentsSection: React.FC<DocumentsSectionProps> = ({ user }) => {
     return matchesSearch && matchesType;
   });
 
+  // Handle file selection
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'front' | 'back') => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      
+      reader.onloadend = () => {
+        if (type === 'front') {
+          setFormData(prev => ({
+            ...prev,
+            frontImage: file,
+            frontImagePreview: reader.result as string
+          }));
+        } else {
+          setFormData(prev => ({
+            ...prev,
+            backImage: file,
+            backImagePreview: reader.result as string
+          }));
+        }
+      };
+      
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Handle triggering file input click
+  const handleUploadClick = (type: 'front' | 'back') => {
+    if (type === 'front' && frontImageInputRef.current) {
+      frontImageInputRef.current.click();
+    } else if (type === 'back' && backImageInputRef.current) {
+      backImageInputRef.current.click();
+    }
+  };
+
+  // Reset form data when closing modal
+  const handleModalChange = (open: boolean) => {
+    if (!open) {
+      setFormData({
+        type: 'aadhaar',
+        name: '',
+        documentNumber: '',
+        expiryDate: '',
+        frontImage: null,
+        backImage: null,
+        frontImagePreview: '',
+        backImagePreview: '',
+      });
+    }
+    setShowAddModal(open);
+  };
+
+  // Save document function (add this or modify existing one)
+  const handleSaveDocument = () => {
+    // Validation
+    if (!formData.type || !formData.name || !formData.documentNumber || !formData.frontImage) {
+      alert('Please fill all required fields and upload front image');
+      return;
+    }
+    
+    // Create new document with actual image data
+    const newDocument = {
+      id: Date.now().toString(),
+      type: formData.type as 'aadhaar' | 'pan' | 'driving_license' | 'passport',
+      name: formData.name,
+      documentNumber: formData.documentNumber,
+      expiryDate: formData.expiryDate || undefined,
+      frontImage: formData.frontImagePreview,
+      backImage: formData.backImagePreview || undefined,
+      isPrimary: false,
+      createdAt: new Date()
+    };
+    
+    // Add to documents list
+    setDocuments(prev => [...prev, newDocument]);
+    
+    // Close modal and reset form
+    handleModalChange(false);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -146,7 +243,7 @@ const DocumentsSection: React.FC<DocumentsSectionProps> = ({ user }) => {
           <h2 className="text-2xl font-bold">Documents</h2>
           <p className="text-muted-foreground">Securely store your important documents</p>
         </div>
-        <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+        <Dialog open={showAddModal} onOpenChange={handleModalChange}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="w-4 h-4 mr-2" />
@@ -163,7 +260,10 @@ const DocumentsSection: React.FC<DocumentsSectionProps> = ({ user }) => {
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="documentType">Document Type</Label>
-                <Select>
+                <Select 
+                  value={formData.type}
+                  onValueChange={(value) => setFormData(prev => ({...prev, type: value}))}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select document type" />
                   </SelectTrigger>
@@ -179,36 +279,107 @@ const DocumentsSection: React.FC<DocumentsSectionProps> = ({ user }) => {
               
               <div className="space-y-2">
                 <Label htmlFor="docName">Name on Document</Label>
-                <Input id="docName" placeholder="Enter name as on document" />
+                <Input 
+                  id="docName" 
+                  placeholder="Enter name as on document" 
+                  value={formData.name}
+                  onChange={(e) => setFormData(prev => ({...prev, name: e.target.value}))}
+                />
               </div>
               
               <div className="space-y-2">
                 <Label htmlFor="docNumber">Document Number</Label>
-                <Input id="docNumber" placeholder="Enter document number" />
+                <Input 
+                  id="docNumber" 
+                  placeholder="Enter document number" 
+                  value={formData.documentNumber}
+                  onChange={(e) => setFormData(prev => ({...prev, documentNumber: e.target.value}))}
+                />
               </div>
               
               <div className="space-y-2">
                 <Label htmlFor="expiryDate">Expiry Date (Optional)</Label>
-                <Input id="expiryDate" type="date" />
+                <Input 
+                  id="expiryDate" 
+                  type="date" 
+                  value={formData.expiryDate}
+                  onChange={(e) => setFormData(prev => ({...prev, expiryDate: e.target.value}))}
+                />
               </div>
               
               <div className="space-y-2">
                 <Label>Front Image</Label>
-                <div className="border-2 border-dashed border-border rounded-lg p-4 text-center">
-                  <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">Click to upload front image</p>
-                </div>
+                <input 
+                  type="file"
+                  ref={frontImageInputRef}
+                  className="hidden"
+                  accept="image/*"
+                  onChange={(e) => handleFileChange(e, 'front')}
+                />
+                {formData.frontImagePreview ? (
+                  <div className="relative">
+                    <img 
+                      src={formData.frontImagePreview} 
+                      alt="Front document" 
+                      className="w-full h-40 object-contain border rounded-lg"
+                    />
+                    <Button
+                      variant="ghost" 
+                      size="sm"
+                      className="absolute top-1 right-1 bg-background/80 hover:bg-background"
+                      onClick={() => setFormData(prev => ({...prev, frontImage: null, frontImagePreview: ''}))}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div 
+                    className="border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => handleUploadClick('front')}
+                  >
+                    <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">Click to upload front image</p>
+                  </div>
+                )}
               </div>
               
               <div className="space-y-2">
                 <Label>Back Image (Optional)</Label>
-                <div className="border-2 border-dashed border-border rounded-lg p-4 text-center">
-                  <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">Click to upload back image</p>
-                </div>
+                <input 
+                  type="file"
+                  ref={backImageInputRef}
+                  className="hidden"
+                  accept="image/*"
+                  onChange={(e) => handleFileChange(e, 'back')}
+                />
+                {formData.backImagePreview ? (
+                  <div className="relative">
+                    <img 
+                      src={formData.backImagePreview} 
+                      alt="Back document" 
+                      className="w-full h-40 object-contain border rounded-lg"
+                    />
+                    <Button
+                      variant="ghost" 
+                      size="sm"
+                      className="absolute top-1 right-1 bg-background/80 hover:bg-background"
+                      onClick={() => setFormData(prev => ({...prev, backImage: null, backImagePreview: ''}))}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div 
+                    className="border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => handleUploadClick('back')}
+                  >
+                    <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">Click to upload back image</p>
+                  </div>
+                )}
               </div>
               
-              <Button className="w-full">Save Document</Button>
+              <Button className="w-full" onClick={handleSaveDocument}>Save Document</Button>
             </div>
           </DialogContent>
         </Dialog>

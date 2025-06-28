@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,15 +10,14 @@ import { Badge } from "@/components/ui/badge";
 import { 
   CreditCard, 
   Plus, 
-  Upload, 
   Copy, 
   Eye, 
   EyeOff, 
   Edit, 
-  Trash2,
-  Calendar,
-  Shield
+  Trash2
 } from 'lucide-react';
+import { saveCard, getAllCards, updateCard, deleteCard } from '@/services/database';
+import { useToast } from '@/contexts/ToastContext';
 
 interface BankCard {
   id: string;
@@ -51,11 +50,13 @@ interface CardFormData {
 }
 
 const CardsSection: React.FC<CardsSectionProps> = ({ user }) => {
+  const { showSuccess, showError } = useToast();
   const [activeTab, setActiveTab] = useState('credit');
   const [showAddModal, setShowAddModal] = useState(false);
   const [visibleDetails, setVisibleDetails] = useState<string[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [currentCardId, setCurrentCardId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [formData, setFormData] = useState<CardFormData>({
     type: 'credit',
     bankName: '',
@@ -68,45 +69,26 @@ const CardsSection: React.FC<CardsSectionProps> = ({ user }) => {
     color: 'from-blue-600 to-purple-600'
   });
 
-  // Sample data
-  const [cards, setCards] = useState<BankCard[]>([
-    {
-      id: '1',
-      type: 'credit',
-      bankName: 'HDFC Bank',
-      cardName: 'Regalia Credit Card',
-      variant: 'visa',
-      cardNumber: '4532 1234 5678 9012',
-      cvv: '123',
-      validFrom: '01/22',
-      validTo: '01/27',
-      color: 'from-blue-600 to-purple-600'
-    },
-    {
-      id: '2',
-      type: 'debit',
-      bankName: 'SBI',
-      cardName: 'Classic Debit Card',
-      variant: 'mastercard',
-      cardNumber: '5432 1098 7654 3210',
-      cvv: '456',
-      validFrom: '03/21',
-      validTo: '03/26',
-      color: 'from-green-600 to-teal-600'
-    },
-    {
-      id: '3',
-      type: 'credit',
-      bankName: 'ICICI Bank',
-      cardName: 'Sapphiro Credit Card',
-      variant: 'visa',
-      cardNumber: '4111 1111 1111 1111',
-      cvv: '789',
-      validFrom: '06/23',
-      validTo: '06/28',
-      color: 'from-orange-600 to-red-600'
-    }
-  ]);
+  // Initialize with empty array instead of demo data
+  const [cards, setCards] = useState<BankCard[]>([]);
+
+  // Fetch cards from database when component loads
+  useEffect(() => {
+    const fetchCards = async () => {
+      try {
+        setIsLoading(true);
+        const userCards = await getAllCards(user.id);
+        setCards(userCards);
+      } catch (error) {
+        console.error('Error fetching cards:', error);
+        ('Failed to load cards');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchCards();
+  }, [user.id]);
 
   const toggleCardDetails = (id: string) => {
     setVisibleDetails(prev => 
@@ -166,71 +148,105 @@ const CardsSection: React.FC<CardsSectionProps> = ({ user }) => {
     setShowAddModal(true);
   };
 
-  // Delete card function
-  const handleDeleteCard = (id: string) => {
-    setCards(prev => prev.filter(card => card.id !== id));
-  };
-
   // Save or update card
-  const handleSaveCard = () => {
+  const handleSaveCard = async () => {
     const { type, bankName, cardName, variant, cardNumber, cvv, validFrom, validTo, color } = formData;
     
     // Validate form data
     if (!bankName || !cardName || !cardNumber || !cvv || !validFrom || !validTo) {
-      // You could add proper error handling here
-      alert('Please fill all required fields');
+      ('Please fill all required fields');
       return;
     }
     
-    if (isEditing && currentCardId) {
-      // Update existing card
-      setCards(prev => prev.map(card => 
-        card.id === currentCardId ? 
-        { 
-          ...card, 
-          type, 
-          bankName, 
-          cardName, 
-          variant, 
-          cardNumber, 
-          cvv, 
-          validFrom, 
-          validTo, 
-          color 
-        } : card
-      ));
-    } else {
-      // Add new card
-      const newCard: BankCard = {
-        id: Date.now().toString(), // Simple ID generation
-        type,  // Already correctly typed from formData
-        bankName,
-        cardName,
-        variant,  // Already correctly typed from formData
-        cardNumber,
-        cvv,
-        validFrom,
-        validTo,
-        color
-      };
-      setCards(prev => [...prev, newCard]);
+    try {
+      if (isEditing && currentCardId) {
+        // Update existing card
+        await updateCard(
+          currentCardId,
+          {
+            type,
+            bankName,
+            cardName,
+            variant,
+            cardNumber,
+            cvv,
+            validFrom,
+            validTo,
+            color
+          },
+          user.id
+        );
+        
+        // Update local state
+        setCards(prev => prev.map(card => 
+          card.id === currentCardId ? 
+          { 
+            ...card, 
+            type, 
+            bankName, 
+            cardName, 
+            variant, 
+            cardNumber, 
+            cvv, 
+            validFrom, 
+            validTo, 
+            color 
+          } : card
+        ));
+        
+        ('Card updated successfully');
+      } else {
+        // Add new card
+        const newCardData = {
+          type,
+          bankName,
+          cardName,
+          variant,
+          cardNumber,
+          cvv,
+          validFrom,
+          validTo,
+          color
+        };
+        
+        const savedCard = await saveCard(newCardData, user.id);
+        
+        // Add to local state
+        setCards(prev => [...prev, savedCard]);
+        ('Card added successfully');
+      }
+      
+      // Reset form and close modal
+      setShowAddModal(false);
+      setIsEditing(false);
+      setCurrentCardId(null);
+      setFormData({
+        type: 'credit',
+        bankName: '',
+        cardName: '',
+        variant: 'visa',
+        cardNumber: '',
+        cvv: '',
+        validFrom: '',
+        validTo: '',
+        color: 'from-blue-600 to-purple-600'
+      });
+    } catch (error) {
+      console.error('Error saving card:', error);
+      ('Failed to save card');
     }
-    
-    // Reset form and close modal
-    setShowAddModal(false);
-    setIsEditing(false);
-    setCurrentCardId(null);
-    setFormData({
-      type: 'credit',
-      bankName: '',
-      cardName: '',
-      variant: 'visa',
-      cardNumber: '',
-      cvv: '',
-      validFrom: '',
-      validTo: '',
-      color: 'from-blue-600 to-purple-600'
-    });
+  };
+
+  // Delete card function
+  const handleDeleteCard = async (id: string) => {
+    try {
+      await deleteCard(id, user.id);
+      setCards(prev => prev.filter(card => card.id !== id));
+      ('Card deleted successfully');
+    } catch (error) {
+      console.error('Error deleting card:', error);
+      ('Failed to delete card');
+    }
   };
 
   // Reset form when opening modal in add mode
@@ -367,6 +383,16 @@ const CardsSection: React.FC<CardsSectionProps> = ({ user }) => {
       </div>
     );
   };
+
+  // Show loading state while fetching cards
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <span className="ml-2">Loading cards...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

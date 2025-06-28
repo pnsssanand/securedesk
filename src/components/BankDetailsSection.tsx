@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,8 @@ import {
   Hash,
   Key
 } from 'lucide-react';
+import { useToast } from '@/contexts/ToastContext';
+import { saveBankDetail, getAllBankDetails, updateBankDetail, deleteBankDetail } from '@/services/database';
 
 interface BankDetail {
   id: string;
@@ -34,40 +36,74 @@ interface BankDetail {
   createdAt: Date;
 }
 
+interface BankDetailFormData {
+  bankName: string;
+  accountHolderName: string;
+  accountNumber: string;
+  ifscCode: string;
+  customerId?: string;
+  pin?: string;
+  netBankingId?: string;
+  netBankingPassword?: string;
+  isPrimary: boolean;
+}
+
 interface BankDetailsSectionProps {
   user: { id: string; name: string; email: string; };
 }
 
 const BankDetailsSection: React.FC<BankDetailsSectionProps> = ({ user }) => {
+  const { showSuccess, showError } = useToast();
   const [showAddModal, setShowAddModal] = useState(false);
   const [visibleDetails, setVisibleDetails] = useState<string[]>([]);
+  const [bankDetails, setBankDetails] = useState<BankDetail[]>([]);
+  const [isEditing, setIsEditing] = useState(false);
+  const [currentDetailId, setCurrentDetailId] = useState<string | null>(null);
+  const [formData, setFormData] = useState<BankDetailFormData>({
+    bankName: '',
+    accountHolderName: '',
+    accountNumber: '',
+    ifscCode: '',
+    customerId: '',
+    pin: '',
+    netBankingId: '',
+    netBankingPassword: '',
+    isPrimary: false
+  });
 
-  // Sample data
-  const [bankDetails, setBankDetails] = useState<BankDetail[]>([
-    {
-      id: '1',
-      bankName: 'HDFC Bank',
-      accountHolderName: 'John Doe',
-      accountNumber: '12345678901234',
-      ifscCode: 'HDFC0001234',
-      customerId: 'CUST123456',
-      pin: '1234',
-      netBankingId: 'john.doe',
-      netBankingPassword: 'SecurePass123',
-      isPrimary: true,
-      createdAt: new Date('2024-01-15')
-    },
-    {
-      id: '2',
-      bankName: 'State Bank of India',
-      accountHolderName: 'John Doe',
-      accountNumber: '98765432109876',
-      ifscCode: 'SBIN0001234',
-      customerId: 'SBI123456',
-      isPrimary: false,
-      createdAt: new Date('2024-01-10')
-    }
-  ]);
+  // Load bank details on component mount
+  useEffect(() => {
+    const loadBankDetails = async () => {
+      try {
+        const details = await getAllBankDetails(user.id);
+        // Transform to match our component's BankDetail interface
+        const transformedDetails = details.map(detail => ({
+          id: detail.id,
+          bankName: detail.bankName,
+          accountHolderName: detail.accountHolderName,
+          accountNumber: detail.accountNumber,
+          ifscCode: detail.ifscCode,
+          customerId: detail.customerId,
+          pin: detail.pin,
+          netBankingId: detail.netBankingId,
+          netBankingPassword: detail.netBankingPassword,
+          isPrimary: detail.isPrimary,
+          createdAt: new Date(detail.createdAt)
+        }));
+        
+        setBankDetails(transformedDetails);
+      } catch (error) {
+        console.error('Failed to load bank details:', error);
+        showError('Load Failed', 'Could not load your bank details');
+      }
+    };
+    
+    loadBankDetails();
+  }, [user.id]);
+
+  const handleFormChange = (field: keyof BankDetailFormData, value: string | boolean) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
 
   const toggleDetailVisibility = (id: string) => {
     setVisibleDetails(prev => 
@@ -78,8 +114,12 @@ const BankDetailsSection: React.FC<BankDetailsSectionProps> = ({ user }) => {
   };
 
   const copyToClipboard = async (text: string, type: string) => {
-    await navigator.clipboard.writeText(text);
-    console.log(`${type} copied to clipboard`);
+    try {
+      await navigator.clipboard.writeText(text);
+      showSuccess('Copied!', `${type} copied to clipboard`);
+    } catch (err) {
+      showError('Failed to Copy', 'Could not copy to clipboard');
+    }
   };
 
   const shareAllDetails = (bankDetail: BankDetail) => {
@@ -102,6 +142,104 @@ ${bankDetail.netBankingId ? `Net Banking ID: ${bankDetail.netBankingId}` : ''}
     return accountNumber;
   };
 
+  const handleEditDetail = (detail: BankDetail) => {
+    setFormData({
+      bankName: detail.bankName,
+      accountHolderName: detail.accountHolderName,
+      accountNumber: detail.accountNumber,
+      ifscCode: detail.ifscCode,
+      customerId: detail.customerId || '',
+      pin: detail.pin || '',
+      netBankingId: detail.netBankingId || '',
+      netBankingPassword: detail.netBankingPassword || '',
+      isPrimary: detail.isPrimary
+    });
+    
+    setCurrentDetailId(detail.id);
+    setIsEditing(true);
+    setShowAddModal(true);
+  };
+
+  const handleDeleteDetail = async (id: string) => {
+    try {
+      await deleteBankDetail(id, user.id);
+      setBankDetails(prev => prev.filter(detail => detail.id !== id));
+      showSuccess('Deleted', 'Bank account removed successfully');
+    } catch (error) {
+      console.error('Failed to delete bank detail:', error);
+      showError('Delete Failed', 'Could not delete the bank account');
+    }
+  };
+
+  const handleSaveDetail = async () => {
+    // Validate required fields
+    if (!formData.bankName || !formData.accountHolderName || !formData.accountNumber || !formData.ifscCode) {
+      showError('Missing Fields', 'Please fill in all required fields');
+      return;
+    }
+
+    try {
+      if (isEditing && currentDetailId) {
+        // Update existing bank detail
+        await updateBankDetail(currentDetailId, formData, user.id);
+        
+        // Update local state
+        setBankDetails(prev => prev.map(detail => detail.id === currentDetailId ? {
+          ...detail,
+          bankName: formData.bankName,
+          accountHolderName: formData.accountHolderName,
+          accountNumber: formData.accountNumber,
+          ifscCode: formData.ifscCode,
+          customerId: formData.customerId || undefined,
+          pin: formData.pin || undefined,
+          netBankingId: formData.netBankingId || undefined,
+          netBankingPassword: formData.netBankingPassword || undefined,
+          isPrimary: formData.isPrimary
+        } : detail));
+        
+        showSuccess('Updated!', 'Bank account updated successfully');
+      } else {
+        // Save new bank detail
+        const result = await saveBankDetail(formData, user.id);
+        
+        // Add to local state
+        setBankDetails(prev => [...prev, {
+          id: result.id,
+          bankName: formData.bankName,
+          accountHolderName: formData.accountHolderName,
+          accountNumber: formData.accountNumber,
+          ifscCode: formData.ifscCode,
+          customerId: formData.customerId || undefined,
+          pin: formData.pin || undefined,
+          netBankingId: formData.netBankingId || undefined,
+          netBankingPassword: formData.netBankingPassword || undefined,
+          isPrimary: formData.isPrimary,
+          createdAt: new Date()
+        }]);
+        
+        showSuccess('Saved!', 'New bank account saved securely');
+      }
+
+      setShowAddModal(false);
+      setIsEditing(false);
+      setCurrentDetailId(null);
+      setFormData({
+        bankName: '',
+        accountHolderName: '',
+        accountNumber: '',
+        ifscCode: '',
+        customerId: '',
+        pin: '',
+        netBankingId: '',
+        netBankingPassword: '',
+        isPrimary: false
+      });
+    } catch (error) {
+      console.error('Failed to save bank detail:', error);
+      showError('Save Failed', 'Could not save your bank account details');
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -112,60 +250,119 @@ ${bankDetail.netBankingId ? `Net Banking ID: ${bankDetail.netBankingId}` : ''}
         </div>
         <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
           <DialogTrigger asChild>
-            <Button>
+            <Button onClick={() => {
+              setIsEditing(false);
+              setCurrentDetailId(null);
+              setFormData({
+                bankName: '',
+                accountHolderName: '',
+                accountNumber: '',
+                ifscCode: '',
+                customerId: '',
+                pin: '',
+                netBankingId: '',
+                netBankingPassword: '',
+                isPrimary: false
+              });
+            }}>
               <Plus className="w-4 h-4 mr-2" />
               Add Bank Account
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Add Bank Account</DialogTitle>
+              <DialogTitle>{isEditing ? 'Edit Bank Account' : 'Add Bank Account'}</DialogTitle>
               <DialogDescription>
-                Store your bank account details securely
+                {isEditing ? 'Update your bank account details' : 'Store your bank account details securely'}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="bankName">Bank Name</Label>
-                <Input id="bankName" placeholder="e.g., HDFC Bank" />
+                <Label htmlFor="bankName">Bank Name *</Label>
+                <Input 
+                  id="bankName" 
+                  placeholder="e.g., HDFC Bank" 
+                  value={formData.bankName}
+                  onChange={(e) => handleFormChange('bankName', e.target.value)}
+                />
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="accountHolderName">Account Holder Name</Label>
-                <Input id="accountHolderName" placeholder="Full name as per bank records" />
+                <Label htmlFor="accountHolderName">Account Holder Name *</Label>
+                <Input 
+                  id="accountHolderName" 
+                  placeholder="Full name as per bank records" 
+                  value={formData.accountHolderName}
+                  onChange={(e) => handleFormChange('accountHolderName', e.target.value)}
+                />
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="accountNumber">Account Number</Label>
-                <Input id="accountNumber" placeholder="Enter account number" />
+                <Label htmlFor="accountNumber">Account Number *</Label>
+                <Input 
+                  id="accountNumber" 
+                  placeholder="Enter account number" 
+                  value={formData.accountNumber}
+                  onChange={(e) => handleFormChange('accountNumber', e.target.value)}
+                />
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="ifscCode">IFSC Code</Label>
-                <Input id="ifscCode" placeholder="e.g., HDFC0001234" />
+                <Label htmlFor="ifscCode">IFSC Code *</Label>
+                <Input 
+                  id="ifscCode" 
+                  placeholder="e.g., HDFC0001234" 
+                  value={formData.ifscCode}
+                  onChange={(e) => handleFormChange('ifscCode', e.target.value)}
+                />
               </div>
               
               <div className="space-y-2">
                 <Label htmlFor="customerId">Customer ID (Optional)</Label>
-                <Input id="customerId" placeholder="Enter customer ID" />
+                <Input 
+                  id="customerId" 
+                  placeholder="Enter customer ID" 
+                  value={formData.customerId}
+                  onChange={(e) => handleFormChange('customerId', e.target.value)}
+                />
               </div>
               
               <div className="space-y-2">
                 <Label htmlFor="pin">ATM PIN (Optional)</Label>
-                <Input id="pin" type="password" placeholder="Enter PIN" maxLength={6} />
+                <Input 
+                  id="pin" 
+                  type="password" 
+                  placeholder="Enter PIN" 
+                  maxLength={6}
+                  value={formData.pin}
+                  onChange={(e) => handleFormChange('pin', e.target.value)}
+                />
               </div>
               
               <div className="space-y-2">
                 <Label htmlFor="netBankingId">Net Banking ID (Optional)</Label>
-                <Input id="netBankingId" placeholder="Enter net banking user ID" />
+                <Input 
+                  id="netBankingId" 
+                  placeholder="Enter net banking user ID" 
+                  value={formData.netBankingId}
+                  onChange={(e) => handleFormChange('netBankingId', e.target.value)}
+                />
               </div>
               
               <div className="space-y-2">
                 <Label htmlFor="netBankingPassword">Net Banking Password (Optional)</Label>
-                <Input id="netBankingPassword" type="password" placeholder="Enter net banking password" />
+                <Input 
+                  id="netBankingPassword" 
+                  type="password" 
+                  placeholder="Enter net banking password" 
+                  value={formData.netBankingPassword}
+                  onChange={(e) => handleFormChange('netBankingPassword', e.target.value)}
+                />
               </div>
               
-              <Button className="w-full">Save Bank Details</Button>
+              <Button className="w-full" onClick={handleSaveDetail}>
+                {isEditing ? 'Update Bank Account' : 'Save Bank Account'}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -208,10 +405,19 @@ ${bankDetail.netBankingId ? `Net Banking ID: ${bankDetail.netBankingId}` : ''}
                     >
                       {isVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </Button>
-                    <Button variant="outline" size="sm">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleEditDetail(bankDetail)}
+                    >
                       <Edit className="w-4 h-4" />
                     </Button>
-                    <Button variant="outline" size="sm" className="text-red-500 hover:text-red-600">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="text-red-500 hover:text-red-600"
+                      onClick={() => handleDeleteDetail(bankDetail.id)}
+                    >
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
