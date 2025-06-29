@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { 
@@ -21,11 +22,14 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/contexts/ToastContext';
 import { saveBankDetail, getAllBankDetails, updateBankDetail, deleteBankDetail } from '@/services/database';
+import ShareModal from "@/components/ui/share-modal";
+import { formatBankDetailsForSharing } from "@/utils/sharing-utils";
 
 interface BankDetail {
   id: string;
   bankName: string;
   accountHolderName: string;
+  accountType?: string; // Added accountType property
   accountNumber: string;
   ifscCode: string;
   customerId?: string;
@@ -39,6 +43,7 @@ interface BankDetail {
 interface BankDetailFormData {
   bankName: string;
   accountHolderName: string;
+  accountType: string;
   accountNumber: string;
   ifscCode: string;
   customerId?: string;
@@ -59,9 +64,15 @@ const BankDetailsSection: React.FC<BankDetailsSectionProps> = ({ user }) => {
   const [bankDetails, setBankDetails] = useState<BankDetail[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [currentDetailId, setCurrentDetailId] = useState<string | null>(null);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [shareData, setShareData] = useState({
+    title: "",
+    content: ""
+  });
   const [formData, setFormData] = useState<BankDetailFormData>({
     bankName: '',
     accountHolderName: '',
+    accountType: 'savings',
     accountNumber: '',
     ifscCode: '',
     customerId: '',
@@ -81,6 +92,7 @@ const BankDetailsSection: React.FC<BankDetailsSectionProps> = ({ user }) => {
           id: detail.id,
           bankName: detail.bankName,
           accountHolderName: detail.accountHolderName,
+          accountType: detail.accountType || 'savings',
           accountNumber: detail.accountNumber,
           ifscCode: detail.ifscCode,
           customerId: detail.customerId,
@@ -123,16 +135,33 @@ const BankDetailsSection: React.FC<BankDetailsSectionProps> = ({ user }) => {
   };
 
   const shareAllDetails = (bankDetail: BankDetail) => {
-    const details = `
-Bank: ${bankDetail.bankName}
-Account Holder: ${bankDetail.accountHolderName}
-Account Number: ${bankDetail.accountNumber}
-IFSC Code: ${bankDetail.ifscCode}
-${bankDetail.customerId ? `Customer ID: ${bankDetail.customerId}` : ''}
-${bankDetail.netBankingId ? `Net Banking ID: ${bankDetail.netBankingId}` : ''}
-    `.trim();
+    // Format data according to the requested format
+    const formattedDetails = formatBankDetailsForSharing({
+      bankName: bankDetail.bankName,
+      accountHolderName: bankDetail.accountHolderName,
+      accountType: bankDetail.accountType || 'Not specified',
+      accountNumber: bankDetail.accountNumber,
+      ifscCode: bankDetail.ifscCode
+    });
+
+    // Set share modal data
+    setShareData({
+      title: `${bankDetail.bankName} Account Details`,
+      content: formattedDetails
+    });
     
-    copyToClipboard(details, 'Bank details');
+    // Open share modal
+    setIsShareModalOpen(true);
+  };
+
+  const handleCopyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(shareData.content);
+      showSuccess('Copied!', 'Bank details copied to clipboard');
+    } catch (error) {
+      console.error('Failed to copy:', error);
+      showError('Copy Failed', 'Could not copy to clipboard');
+    }
   };
 
   const maskAccountNumber = (accountNumber: string, visible: boolean = false) => {
@@ -146,6 +175,7 @@ ${bankDetail.netBankingId ? `Net Banking ID: ${bankDetail.netBankingId}` : ''}
     setFormData({
       bankName: detail.bankName,
       accountHolderName: detail.accountHolderName,
+      accountType: detail.accountType || 'savings',
       accountNumber: detail.accountNumber,
       ifscCode: detail.ifscCode,
       customerId: detail.customerId || '',
@@ -172,48 +202,55 @@ ${bankDetail.netBankingId ? `Net Banking ID: ${bankDetail.netBankingId}` : ''}
   };
 
   const handleSaveDetail = async () => {
-    // Validate required fields
+    // Validate only required fields (account number and IFSC code)
     if (!formData.bankName || !formData.accountHolderName || !formData.accountNumber || !formData.ifscCode) {
       showError('Missing Fields', 'Please fill in all required fields');
       return;
     }
 
     try {
+      // Prepare data for saving - ensure optional fields are handled correctly
+      const bankDetailsToSave = {
+        bankName: formData.bankName,
+        accountHolderName: formData.accountHolderName,
+        accountType: formData.accountType,
+        accountNumber: formData.accountNumber,
+        ifscCode: formData.ifscCode,
+        // Optional fields - use empty string if undefined
+        customerId: formData.customerId || '',
+        pin: formData.pin || '',
+        netBankingId: formData.netBankingId || '',
+        netBankingPassword: formData.netBankingPassword || '',
+        isPrimary: formData.isPrimary
+      };
+
       if (isEditing && currentDetailId) {
         // Update existing bank detail
-        await updateBankDetail(currentDetailId, formData, user.id);
+        await updateBankDetail(currentDetailId, bankDetailsToSave, user.id);
         
         // Update local state
         setBankDetails(prev => prev.map(detail => detail.id === currentDetailId ? {
           ...detail,
-          bankName: formData.bankName,
-          accountHolderName: formData.accountHolderName,
-          accountNumber: formData.accountNumber,
-          ifscCode: formData.ifscCode,
-          customerId: formData.customerId || undefined,
-          pin: formData.pin || undefined,
-          netBankingId: formData.netBankingId || undefined,
-          netBankingPassword: formData.netBankingPassword || undefined,
-          isPrimary: formData.isPrimary
+          ...bankDetailsToSave,
+          customerId: bankDetailsToSave.customerId || undefined,
+          pin: bankDetailsToSave.pin || undefined,
+          netBankingId: bankDetailsToSave.netBankingId || undefined,
+          netBankingPassword: bankDetailsToSave.netBankingPassword || undefined,
         } : detail));
         
         showSuccess('Updated!', 'Bank account updated successfully');
       } else {
         // Save new bank detail
-        const result = await saveBankDetail(formData, user.id);
+        const result = await saveBankDetail(bankDetailsToSave, user.id);
         
         // Add to local state
         setBankDetails(prev => [...prev, {
           id: result.id,
-          bankName: formData.bankName,
-          accountHolderName: formData.accountHolderName,
-          accountNumber: formData.accountNumber,
-          ifscCode: formData.ifscCode,
-          customerId: formData.customerId || undefined,
-          pin: formData.pin || undefined,
-          netBankingId: formData.netBankingId || undefined,
-          netBankingPassword: formData.netBankingPassword || undefined,
-          isPrimary: formData.isPrimary,
+          ...bankDetailsToSave,
+          customerId: bankDetailsToSave.customerId || undefined,
+          pin: bankDetailsToSave.pin || undefined,
+          netBankingId: bankDetailsToSave.netBankingId || undefined,
+          netBankingPassword: bankDetailsToSave.netBankingPassword || undefined,
           createdAt: new Date()
         }]);
         
@@ -226,6 +263,7 @@ ${bankDetail.netBankingId ? `Net Banking ID: ${bankDetail.netBankingId}` : ''}
       setFormData({
         bankName: '',
         accountHolderName: '',
+        accountType: 'savings',
         accountNumber: '',
         ifscCode: '',
         customerId: '',
@@ -256,6 +294,7 @@ ${bankDetail.netBankingId ? `Net Banking ID: ${bankDetail.netBankingId}` : ''}
               setFormData({
                 bankName: '',
                 accountHolderName: '',
+                accountType: 'savings',
                 accountNumber: '',
                 ifscCode: '',
                 customerId: '',
@@ -295,6 +334,24 @@ ${bankDetail.netBankingId ? `Net Banking ID: ${bankDetail.netBankingId}` : ''}
                   value={formData.accountHolderName}
                   onChange={(e) => handleFormChange('accountHolderName', e.target.value)}
                 />
+              </div>
+              
+              {/* Add account type dropdown here */}
+              <div className="space-y-2">
+                <Label htmlFor="accountType">Account Type *</Label>
+                <Select 
+                  value={formData.accountType} 
+                  onValueChange={(value) => handleFormChange('accountType', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select account type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="savings">Savings Account</SelectItem>
+                    <SelectItem value="current">Current Account</SelectItem>
+                    <SelectItem value="fixed">Fixed Deposit Account</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               
               <div className="space-y-2">
@@ -581,6 +638,15 @@ ${bankDetail.netBankingId ? `Net Banking ID: ${bankDetail.netBankingId}` : ''}
           </CardContent>
         </Card>
       )}
+
+      {/* Share Modal */}
+      <ShareModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        title={shareData.title}
+        content={shareData.content}
+        onCopyToClipboard={handleCopyToClipboard}
+      />
     </div>
   );
 };

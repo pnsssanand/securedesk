@@ -317,6 +317,7 @@ export const saveBankDetail = async (bankDetail, userId) => {
       id: bankDetailId,
       bankName: bankDetail.bankName,
       accountHolderName: bankDetail.accountHolderName,
+      accountType: bankDetail.accountType || 'savings', // Added account type with default
       accountNumber: encryptedAccountNumber,
       ifscCode: bankDetail.ifscCode,
       customerId: encryptedCustomerId,
@@ -381,6 +382,7 @@ export const updateBankDetail = async (id, bankDetail, userId) => {
     await updateDoc(bankDetailRef, {
       bankName: bankDetail.bankName,
       accountHolderName: bankDetail.accountHolderName,
+      accountType: bankDetail.accountType || 'savings', // Added account type with default
       accountNumber: encryptedAccountNumber,
       ifscCode: bankDetail.ifscCode,
       customerId: encryptedCustomerId,

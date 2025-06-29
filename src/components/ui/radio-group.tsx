@@ -40,3 +40,23 @@ const RadioGroupItem = React.forwardRef<
 RadioGroupItem.displayName = RadioGroupPrimitive.Item.displayName
 
 export { RadioGroup, RadioGroupItem }
+
+const ProfileVisibilityOptions = () => {
+  return (
+    <RadioGroup defaultValue="public">
+      <div className="flex items-center space-x-2">
+        <RadioGroupItem value="public">
+          <span>Public</span>
+        </RadioGroupItem>
+        <RadioGroupItem value="private">
+          <span>Private</span>
+        </RadioGroupItem>
+        <RadioGroupItem value="restricted">
+          <span>Restricted</span>
+        </RadioGroupItem>
+      </div>
+    </RadioGroup>
+  )
+}
+
+export { ProfileVisibilityOptions }

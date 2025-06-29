@@ -24,6 +24,7 @@ interface BankCard {
   type: 'credit' | 'debit';
   bankName: string;
   cardName: string;
+  cardHolderName: string; // Added card holder name
   variant: 'visa' | 'mastercard' | 'rupay';
   cardNumber: string;
   cvv: string;
@@ -41,6 +42,7 @@ interface CardFormData {
   type: 'credit' | 'debit';
   bankName: string;
   cardName: string;
+  cardHolderName: string; // Added card holder name
   variant: 'visa' | 'mastercard' | 'rupay';
   cardNumber: string;
   cvv: string;
@@ -61,6 +63,7 @@ const CardsSection: React.FC<CardsSectionProps> = ({ user }) => {
     type: 'credit',
     bankName: '',
     cardName: '',
+    cardHolderName: '', // Added card holder name
     variant: 'visa',
     cardNumber: '',
     cvv: '',
@@ -136,6 +139,7 @@ const CardsSection: React.FC<CardsSectionProps> = ({ user }) => {
       type: card.type,
       bankName: card.bankName,
       cardName: card.cardName,
+      cardHolderName: card.cardHolderName, // Added card holder name
       variant: card.variant,
       cardNumber: card.cardNumber,
       cvv: card.cvv,
@@ -150,10 +154,10 @@ const CardsSection: React.FC<CardsSectionProps> = ({ user }) => {
 
   // Save or update card
   const handleSaveCard = async () => {
-    const { type, bankName, cardName, variant, cardNumber, cvv, validFrom, validTo, color } = formData;
+    const { type, bankName, cardName, cardHolderName, variant, cardNumber, cvv, validFrom, validTo, color } = formData;
     
     // Validate form data
-    if (!bankName || !cardName || !cardNumber || !cvv || !validFrom || !validTo) {
+    if (!bankName || !cardName || !cardHolderName || !cardNumber || !cvv || !validFrom || !validTo) {
       ('Please fill all required fields');
       return;
     }
@@ -167,6 +171,7 @@ const CardsSection: React.FC<CardsSectionProps> = ({ user }) => {
             type,
             bankName,
             cardName,
+            cardHolderName,
             variant,
             cardNumber,
             cvv,
@@ -184,7 +189,8 @@ const CardsSection: React.FC<CardsSectionProps> = ({ user }) => {
             ...card, 
             type, 
             bankName, 
-            cardName, 
+            cardName,
+            cardHolderName, 
             variant, 
             cardNumber, 
             cvv, 
@@ -201,6 +207,7 @@ const CardsSection: React.FC<CardsSectionProps> = ({ user }) => {
           type,
           bankName,
           cardName,
+          cardHolderName,
           variant,
           cardNumber,
           cvv,
@@ -224,6 +231,7 @@ const CardsSection: React.FC<CardsSectionProps> = ({ user }) => {
         type: 'credit',
         bankName: '',
         cardName: '',
+        cardHolderName: '', // Added card holder name
         variant: 'visa',
         cardNumber: '',
         cvv: '',
@@ -286,16 +294,22 @@ const CardsSection: React.FC<CardsSectionProps> = ({ user }) => {
             </p>
             <div className="flex justify-between items-end">
               <div>
-                <p className="text-xs opacity-80">VALID FROM</p>
-                <p className="text-sm font-mono">{card.validFrom}</p>
+                <p className="text-xs opacity-80">CARDHOLDER</p>
+                <p className="text-sm font-mono">{card.cardHolderName}</p>
               </div>
-              <div>
-                <p className="text-xs opacity-80">VALID THRU</p>
-                <p className="text-sm font-mono">{card.validTo}</p>
-              </div>
-              <div>
-                <p className="text-xs opacity-80">CVV</p>
-                <p className="text-sm font-mono">{isVisible ? card.cvv : '***'}</p>
+              <div className="flex space-x-4">
+                <div>
+                  <p className="text-xs opacity-80">VALID FROM</p>
+                  <p className="text-sm font-mono">{card.validFrom}</p>
+                </div>
+                <div>
+                  <p className="text-xs opacity-80">VALID THRU</p>
+                  <p className="text-sm font-mono">{card.validTo}</p>
+                </div>
+                <div>
+                  <p className="text-xs opacity-80">CVV</p>
+                  <p className="text-sm font-mono">{isVisible ? card.cvv : '***'}</p>
+                </div>
               </div>
             </div>
           </div>
@@ -338,6 +352,10 @@ const CardsSection: React.FC<CardsSectionProps> = ({ user }) => {
             
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Card Holder:</span>
+                  <span className="font-medium">{card.cardHolderName}</span>
+                </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Card Number:</span>
                   <div className="flex items-center space-x-2">
@@ -450,6 +468,16 @@ const CardsSection: React.FC<CardsSectionProps> = ({ user }) => {
                   placeholder="e.g., Regalia Credit Card" 
                   value={formData.cardName}
                   onChange={e => handleFormChange('cardName', e.target.value)}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="cardHolderName">Card Holder Name</Label>
+                <Input 
+                  id="cardHolderName" 
+                  placeholder="e.g., John Doe" 
+                  value={formData.cardHolderName}
+                  onChange={e => handleFormChange('cardHolderName', e.target.value)}
                 />
               </div>
               
