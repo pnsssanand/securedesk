@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +44,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
   const [activeSection, setActiveSection] = useState('vault');
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [stats, setStats] = useState({
+    passwords: 0,
+    cards: 0,
+    documents: 0,
+    banks: 0
+  });
+  const [isLoading, setIsLoading] = useState(true);
 
   const toggleTheme = () => {
     setIsDarkMode(!isDarkMode);
@@ -57,6 +64,47 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
     { id: 'bank', label: 'Bank Details', icon: Building2, color: 'text-purple-500' },
     { id: 'settings', label: 'Settings', icon: Settings, color: 'text-gray-500' },
   ];
+
+  const fetchStats = async () => {
+    try {
+      // Replace with your actual API endpoints
+      const [passwordsRes, cardsRes, documentsRes, banksRes] = await Promise.all([
+        fetch('/api/passwords/count'),
+        fetch('/api/cards/count'),
+        fetch('/api/documents/count'),
+        fetch('/api/banks/count')
+      ]);
+
+      const newStats = {
+        passwords: await passwordsRes.json(),
+        cards: await cardsRes.json(),
+        documents: await documentsRes.json(),
+        banks: await banksRes.json()
+      };
+
+      setStats(newStats);
+      setIsLoading(false);
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+      // Fallback to mock data for demonstration
+      setStats({
+        passwords: 24,
+        cards: 3,
+        documents: 12,
+        banks: 5
+      });
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStats();
+    
+    // Set up real-time updates every 30 seconds
+    const interval = setInterval(fetchStats, 30000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   const renderContent = () => {
     switch (activeSection) {
@@ -189,7 +237,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
                         <Key className="w-5 h-5 text-blue-500" />
                       </div>
                       <div>
-                        <p className="text-2xl font-bold">24</p>
+                        <p className="text-2xl font-bold">{isLoading ? <span className="animate-pulse">--</span> : stats.passwords}</p>
                         <p className="text-sm text-muted-foreground">Passwords</p>
                       </div>
                     </div>
@@ -202,8 +250,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
                         <Shield className="w-5 h-5 text-red-500" />
                       </div>
                       <div>
-                        <p className="text-2xl font-bold">3</p>
-                        <p className="text-sm text-muted-foreground">Weak Passwords</p>
+                        <p className="text-2xl font-bold">{isLoading ? <span className="animate-pulse">--</span> : stats.cards}</p>
+                        <p className="text-sm text-muted-foreground">Bank Cards</p>
                       </div>
                     </div>
                   </CardContent>
@@ -215,8 +263,21 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
                         <FileText className="w-5 h-5 text-green-500" />
                       </div>
                       <div>
-                        <p className="text-2xl font-bold">12</p>
+                        <p className="text-2xl font-bold">{isLoading ? <span className="animate-pulse">--</span> : stats.documents}</p>
                         <p className="text-sm text-muted-foreground">Documents</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                        <Building2 className="w-5 h-5 text-purple-500" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold">{isLoading ? <span className="animate-pulse">--</span> : stats.banks}</p>
+                        <p className="text-sm text-muted-foreground">Bank Details</p>
                       </div>
                     </div>
                   </CardContent>

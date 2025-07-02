@@ -14,7 +14,9 @@ import {
   deleteDoc, 
   query, 
   where, 
-  setDoc 
+  setDoc,
+  getDoc,
+  onSnapshot
 } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { auth, db } from '../config/firebase';
@@ -261,14 +263,37 @@ export const getAllCards = async (userId) => {
 // Update existing card
 export const updateCard = async (id, cardData, userId) => {
   try {
+    if (!id || !userId) {
+      throw new Error('Missing card ID or user ID for update operation');
+    }
+
+    console.log('=== UPDATE CARD REQUEST ===');
+    console.log('Card ID:', id);
+    console.log('User ID:', userId);
+    console.log('Update data:', cardData);
+    
     const encryptedCardNumber = encrypt(cardData.cardNumber);
     const encryptedCvv = encrypt(cardData.cvv);
     
     const cardRef = doc(db, 'cards', id);
-    await updateDoc(cardRef, {
+    
+    // First check if the card exists and belongs to this user
+    const cardSnapshot = await getDoc(cardRef);
+    if (!cardSnapshot.exists()) {
+      throw new Error('Card not found');
+    }
+    
+    const existingData = cardSnapshot.data();
+    if (existingData.userId !== userId) {
+      throw new Error('Not authorized to update this card');
+    }
+    
+    // Prepare update data
+    const updateData = {
       type: cardData.type,
       bankName: cardData.bankName,
       cardName: cardData.cardName,
+      cardHolderName: cardData.cardHolderName,
       variant: cardData.variant,
       cardNumber: encryptedCardNumber,
       cvv: encryptedCvv,
@@ -277,13 +302,22 @@ export const updateCard = async (id, cardData, userId) => {
       color: cardData.color,
       updatedAt: new Date().toISOString(),
       userId
-    });
+    };
     
+    await updateDoc(cardRef, updateData);
+    
+    console.log('=== UPDATE SUCCESSFUL ===');
     console.log('Card updated successfully');
-    return true;
+    
+    // Return the updated card data (decrypted for UI use)
+    return {
+      id,
+      ...cardData,
+      updatedAt: updateData.updatedAt
+    };
   } catch (error) {
     console.error('Error updating card:', error);
-    throw error;
+    throw new Error(`Failed to update card: ${error.message}`);
   }
 };
 
@@ -481,6 +515,104 @@ export const deleteDocument = async (document, userId) => {
   }
 };
 
+// Add functions to get counts if they don't already exist
+export const getItemCounts = async (userId) => {
+  try {
+    const passwordsQuery = query(
+      collection(db, 'passwords'),
+      where('userId', '==', userId)
+    );
+    const passwordsSnapshot = await getDocs(passwordsQuery);
+    
+    const cardsQuery = query(
+      collection(db, 'cards'),
+      where('userId', '==', userId)
+    );
+    const cardsSnapshot = await getDocs(cardsQuery);
+    
+    const bankDetailsQuery = query(
+      collection(db, 'bankDetails'),
+      where('userId', '==', userId)
+    );
+    const bankDetailsSnapshot = await getDocs(bankDetailsQuery);
+    
+    const documentsQuery = query(
+      collection(db, 'documents'),
+      where('userId', '==', userId)
+    );
+    const documentsSnapshot = await getDocs(documentsQuery);
+    
+    return {
+      passwords: passwordsSnapshot.size,
+      bankCards: cardsSnapshot.size,
+      bankDetails: bankDetailsSnapshot.size,
+      documents: documentsSnapshot.size
+    };
+  } catch (error) {
+    console.error('Error getting item counts:', error);
+    throw error;
+  }
+};
+
+// New function for real-time item counts
+export const subscribeToItemCounts = (userId, callback) => {
+  if (!userId) return () => {};
+
+  // Set up queries for each collection
+  const passwordsQuery = query(
+    collection(db, 'passwords'),
+    where('userId', '==', userId)
+  );
+  
+  const cardsQuery = query(
+    collection(db, 'cards'),
+    where('userId', '==', userId)
+  );
+  
+  const bankDetailsQuery = query(
+    collection(db, 'bankDetails'),
+    where('userId', '==', userId)
+  );
+  
+  const documentsQuery = query(
+    collection(db, 'documents'),
+    where('userId', '==', userId)
+  );
+  
+  // Set up real-time listeners
+  const unsubscribePasswords = onSnapshot(passwordsQuery, (snapshot) => {
+    callback('passwords', snapshot.size);
+  }, (error) => {
+    console.error('Error in passwords listener:', error);
+  });
+  
+  const unsubscribeCards = onSnapshot(cardsQuery, (snapshot) => {
+    callback('bankCards', snapshot.size);
+  }, (error) => {
+    console.error('Error in cards listener:', error);
+  });
+  
+  const unsubscribeBankDetails = onSnapshot(bankDetailsQuery, (snapshot) => {
+    callback('bankDetails', snapshot.size);
+  }, (error) => {
+    console.error('Error in bank details listener:', error);
+  });
+  
+  const unsubscribeDocuments = onSnapshot(documentsQuery, (snapshot) => {
+    callback('documents', snapshot.size);
+  }, (error) => {
+    console.error('Error in documents listener:', error);
+  });
+  
+  // Return a cleanup function that unsubscribes from all listeners
+  return () => {
+    unsubscribePasswords();
+    unsubscribeCards();
+    unsubscribeBankDetails();
+    unsubscribeDocuments();
+  };
+};
+
 
 export default {
   savePassword,
@@ -499,5 +631,7 @@ export default {
   authenticateUser,
   saveDocument,
   getAllDocuments,
-  deleteDocument
+  deleteDocument,
+  getItemCounts,
+  subscribeToItemCounts
 };

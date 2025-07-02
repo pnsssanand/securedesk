@@ -14,7 +14,8 @@ import {
   Eye, 
   EyeOff, 
   Edit, 
-  Trash2
+  Trash2,
+  AlertCircle
 } from 'lucide-react';
 import { saveCard, getAllCards, updateCard, deleteCard } from '@/services/database';
 import { useToast } from '@/contexts/ToastContext';
@@ -52,18 +53,20 @@ interface CardFormData {
 }
 
 const CardsSection: React.FC<CardsSectionProps> = ({ user }) => {
-  const { showSuccess, showError } = useToast();
+  const { showSuccess, showError, showInfo } = useToast();
   const [activeTab, setActiveTab] = useState('credit');
   const [showAddModal, setShowAddModal] = useState(false);
   const [visibleDetails, setVisibleDetails] = useState<string[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [currentCardId, setCurrentCardId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [formData, setFormData] = useState<CardFormData>({
     type: 'credit',
     bankName: '',
     cardName: '',
-    cardHolderName: '', // Added card holder name
+    cardHolderName: '',
     variant: 'visa',
     cardNumber: '',
     cvv: '',
@@ -81,17 +84,38 @@ const CardsSection: React.FC<CardsSectionProps> = ({ user }) => {
       try {
         setIsLoading(true);
         const userCards = await getAllCards(user.id);
-        setCards(userCards);
+        setCards(userCards || []);
       } catch (error) {
         console.error('Error fetching cards:', error);
-        ('Failed to load cards');
+        showError('Failed to Load', 'Could not load your cards. Please refresh the page.');
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchCards();
-  }, [user.id]);
+  }, [user.id, showError]);
+
+  // Added missing handleDeleteCard function
+  const handleDeleteCard = async (id: string) => {
+    try {
+      await deleteCard(id, user.id);
+      setCards(prev => prev.filter(card => card.id !== id));
+      showSuccess('Card Deleted', 'Your bank card has been successfully removed from the vault');
+    } catch (error) {
+      console.error('Failed to delete card:', error);
+      showError('Delete Failed', 'Could not delete the card. Please try again.');
+    }
+  };
+
+  // Added missing handleAddCardClick function
+  const handleAddCardClick = () => {
+    // Set default type to match the current active tab
+    setFormData(prev => ({ ...prev, type: activeTab as 'credit' | 'debit' }));
+    setIsEditing(false);
+    setCurrentCardId(null);
+    setShowAddModal(true);
+  };
 
   const toggleCardDetails = (id: string) => {
     setVisibleDetails(prev => 
@@ -102,8 +126,13 @@ const CardsSection: React.FC<CardsSectionProps> = ({ user }) => {
   };
 
   const copyToClipboard = async (text: string, type: string) => {
-    await navigator.clipboard.writeText(text);
-    console.log(`${type} copied to clipboard`);
+    try {
+      await navigator.clipboard.writeText(text);
+      showSuccess('Copied!', `${type} copied to clipboard`);
+    } catch (error) {
+      console.error(`Failed to copy ${type}:`, error);
+      showError('Copy Failed', 'Could not copy to clipboard');
+    }
   };
 
   const getVariantLogo = (variant: string) => {
@@ -122,105 +151,132 @@ const CardsSection: React.FC<CardsSectionProps> = ({ user }) => {
     return number;
   };
 
-  // Handle form field changes
+  // Handle form field changes with validation
   const handleFormChange = (field: keyof CardFormData, value: string) => {
+    // Clear the error for this field when user makes changes
+    setFormErrors(prev => ({ ...prev, [field]: '' }));
+
     if (field === 'type' && (value === 'credit' || value === 'debit')) {
       setFormData(prev => ({ ...prev, type: value }));
     } else if (field === 'variant' && (value === 'visa' || value === 'mastercard' || value === 'rupay')) {
       setFormData(prev => ({ ...prev, variant: value as 'visa' | 'mastercard' | 'rupay' }));
+    } else if (field === 'cardNumber') {
+      // Format card number with spaces for better readability
+      const formatted = value.replace(/[^0-9]/g, '').substring(0, 16);
+      setFormData(prev => ({ ...prev, cardNumber: formatted }));
+    } else if (field === 'cvv') {
+      // Only allow numbers for CVV
+      const formatted = value.replace(/[^0-9]/g, '').substring(0, 4);
+      setFormData(prev => ({ ...prev, cvv: formatted }));
+    } else if (field === 'validFrom' || field === 'validTo') {
+      // Format MM/YY dates
+      let formatted = value.replace(/[^0-9]/g, '');
+      if (formatted.length > 2) {
+        formatted = formatted.substring(0, 2) + '/' + formatted.substring(2, 4);
+      }
+      setFormData(prev => ({ ...prev, [field]: formatted }));
     } else {
       setFormData(prev => ({ ...prev, [field]: value }));
     }
   };
 
-  // Edit card function
-  const handleEditCard = (card: BankCard) => {
-    setFormData({
-      type: card.type,
-      bankName: card.bankName,
-      cardName: card.cardName,
-      cardHolderName: card.cardHolderName, // Added card holder name
-      variant: card.variant,
-      cardNumber: card.cardNumber,
-      cvv: card.cvv,
-      validFrom: card.validFrom,
-      validTo: card.validTo,
-      color: card.color
-    });
-    setCurrentCardId(card.id);
-    setIsEditing(true);
-    setShowAddModal(true);
+  // Validate form fields
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {};
+    
+    if (!formData.bankName.trim()) {
+      errors.bankName = 'Bank name is required';
+    }
+    
+    if (!formData.cardName.trim()) {
+      errors.cardName = 'Card name is required';
+    }
+    
+    if (!formData.cardHolderName.trim()) {
+      errors.cardHolderName = 'Card holder name is required';
+    }
+    
+    if (!formData.cardNumber.trim()) {
+      errors.cardNumber = 'Card number is required';
+    } else if (formData.cardNumber.replace(/\s/g, '').length < 13) {
+      errors.cardNumber = 'Card number must be at least 13 digits';
+    }
+    
+    if (!formData.cvv.trim()) {
+      errors.cvv = 'CVV is required';
+    } else if (formData.cvv.length < 3) {
+      errors.cvv = 'CVV must be at least 3 digits';
+    }
+    
+    if (!formData.validFrom.trim()) {
+      errors.validFrom = 'Valid from date is required';
+    } else if (!/^\d{2}\/\d{2}$/.test(formData.validFrom)) {
+      errors.validFrom = 'Format must be MM/YY';
+    }
+    
+    if (!formData.validTo.trim()) {
+      errors.validTo = 'Valid to date is required';
+    } else if (!/^\d{2}\/\d{2}$/.test(formData.validTo)) {
+      errors.validTo = 'Format must be MM/YY';
+    }
+    
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   // Save or update card
   const handleSaveCard = async () => {
-    const { type, bankName, cardName, cardHolderName, variant, cardNumber, cvv, validFrom, validTo, color } = formData;
-    
-    // Validate form data
-    if (!bankName || !cardName || !cardHolderName || !cardNumber || !cvv || !validFrom || !validTo) {
-      ('Please fill all required fields');
+    // Validate form before submission
+    if (!validateForm()) {
+      showError('Validation Error', 'Please correct the errors in the form');
       return;
     }
     
     try {
+      // Set saving state to show loading indicator
+      setIsSaving(true);
+      
+      const { type, bankName, cardName, cardHolderName, variant, cardNumber, cvv, validFrom, validTo, color } = formData;
+      
+      // Format data for saving
+      const cardData = {
+        type,
+        bankName: bankName.trim(),
+        cardName: cardName.trim(),
+        cardHolderName: cardHolderName.trim(),
+        variant,
+        cardNumber: cardNumber.trim(),
+        cvv: cvv.trim(),
+        validFrom: validFrom.trim(),
+        validTo: validTo.trim(),
+        color
+      };
+      
       if (isEditing && currentCardId) {
         // Update existing card
-        await updateCard(
-          currentCardId,
-          {
-            type,
-            bankName,
-            cardName,
-            cardHolderName,
-            variant,
-            cardNumber,
-            cvv,
-            validFrom,
-            validTo,
-            color
-          },
-          user.id
-        );
+        console.log('Updating card with ID:', currentCardId);
+        console.log('Card data:', cardData);
         
-        // Update local state
+        const updatedCard = await updateCard(currentCardId, cardData, user.id);
+        
+        // Update local state with the updated card
         setCards(prev => prev.map(card => 
-          card.id === currentCardId ? 
-          { 
-            ...card, 
-            type, 
-            bankName, 
-            cardName,
-            cardHolderName, 
-            variant, 
-            cardNumber, 
-            cvv, 
-            validFrom, 
-            validTo, 
-            color 
-          } : card
+          card.id === currentCardId ? { ...card, ...cardData } : card
         ));
         
-        ('Card updated successfully');
+        showSuccess('Card Updated', 'Your card details have been successfully updated');
       } else {
         // Add new card
-        const newCardData = {
-          type,
-          bankName,
-          cardName,
-          cardHolderName,
-          variant,
-          cardNumber,
-          cvv,
-          validFrom,
-          validTo,
-          color
-        };
+        console.log('Adding new card:', cardData);
+        const savedCard = await saveCard(cardData, user.id);
         
-        const savedCard = await saveCard(newCardData, user.id);
+        if (!savedCard || !savedCard.id) {
+          throw new Error('Failed to save card - no card data returned');
+        }
         
         // Add to local state
         setCards(prev => [...prev, savedCard]);
-        ('Card added successfully');
+        showSuccess('Card Added', 'Your bank card has been securely saved');
       }
       
       // Reset form and close modal
@@ -231,7 +287,7 @@ const CardsSection: React.FC<CardsSectionProps> = ({ user }) => {
         type: 'credit',
         bankName: '',
         cardName: '',
-        cardHolderName: '', // Added card holder name
+        cardHolderName: '',
         variant: 'visa',
         cardNumber: '',
         cvv: '',
@@ -239,31 +295,38 @@ const CardsSection: React.FC<CardsSectionProps> = ({ user }) => {
         validTo: '',
         color: 'from-blue-600 to-purple-600'
       });
+      setFormErrors({});
     } catch (error) {
       console.error('Error saving card:', error);
-      ('Failed to save card');
+      showError('Save Failed', `Unable to save your card details: ${error.message}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  // Delete card function
-  const handleDeleteCard = async (id: string) => {
-    try {
-      await deleteCard(id, user.id);
-      setCards(prev => prev.filter(card => card.id !== id));
-      ('Card deleted successfully');
-    } catch (error) {
-      console.error('Error deleting card:', error);
-      ('Failed to delete card');
-    }
-  };
-
-  // Reset form when opening modal in add mode
-  const handleAddCardClick = () => {
-    // Set default type to match the current active tab
-    setFormData(prev => ({ ...prev, type: activeTab as 'credit' | 'debit' }));
-    setIsEditing(false);
-    setCurrentCardId(null);
+  // Edit card function - needs to properly set the card data
+  const handleEditCard = (card: BankCard) => {
+    console.log("Editing card with ID:", card.id);
+    
+    // Make sure we're using the exact data from the card object
+    setFormData({
+      type: card.type,
+      bankName: card.bankName,
+      cardName: card.cardName,
+      cardHolderName: card.cardHolderName,
+      variant: card.variant,
+      cardNumber: card.cardNumber,
+      cvv: card.cvv,
+      validFrom: card.validFrom,
+      validTo: card.validTo,
+      color: card.color
+    });
+    
+    // Set the current card ID for update
+    setCurrentCardId(card.id);
+    setIsEditing(true);
     setShowAddModal(true);
+    setFormErrors({}); // Clear any previous form errors
   };
 
   const filteredCards = cards.filter(card => card.type === activeTab);
@@ -400,6 +463,7 @@ const CardsSection: React.FC<CardsSectionProps> = ({ user }) => {
         </Card>
       </div>
     );
+
   };
 
   // Show loading state while fetching cards
@@ -420,7 +484,13 @@ const CardsSection: React.FC<CardsSectionProps> = ({ user }) => {
           <h2 className="text-2xl font-bold">Bank Cards</h2>
           <p className="text-muted-foreground">Manage your payment cards securely</p>
         </div>
-        <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+        <Dialog open={showAddModal} onOpenChange={(open) => {
+          setShowAddModal(open);
+          if (!open) {
+            // Reset form errors when closing the dialog
+            setFormErrors({});
+          }
+        }}>
           <DialogTrigger asChild>
             <Button onClick={handleAddCardClick}>
               <Plus className="w-4 h-4 mr-2" />
@@ -452,33 +522,57 @@ const CardsSection: React.FC<CardsSectionProps> = ({ user }) => {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="bankName">Bank Name</Label>
+                <Label htmlFor="bankName" className={formErrors.bankName ? "text-red-500" : ""}>
+                  Bank Name *
+                </Label>
                 <Input 
                   id="bankName" 
                   placeholder="e.g., HDFC Bank" 
                   value={formData.bankName}
                   onChange={e => handleFormChange('bankName', e.target.value)}
+                  className={formErrors.bankName ? "border-red-500" : ""}
                 />
+                {formErrors.bankName && (
+                  <p className="text-xs text-red-500 flex items-center mt-1">
+                    <AlertCircle className="h-3 w-3 mr-1" /> {formErrors.bankName}
+                  </p>
+                )}
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="cardName">Card Name</Label>
+                <Label htmlFor="cardName" className={formErrors.cardName ? "text-red-500" : ""}>
+                  Card Name *
+                </Label>
                 <Input 
                   id="cardName" 
                   placeholder="e.g., Regalia Credit Card" 
                   value={formData.cardName}
                   onChange={e => handleFormChange('cardName', e.target.value)}
+                  className={formErrors.cardName ? "border-red-500" : ""}
                 />
+                {formErrors.cardName && (
+                  <p className="text-xs text-red-500 flex items-center mt-1">
+                    <AlertCircle className="h-3 w-3 mr-1" /> {formErrors.cardName}
+                  </p>
+                )}
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="cardHolderName">Card Holder Name</Label>
+                <Label htmlFor="cardHolderName" className={formErrors.cardHolderName ? "text-red-500" : ""}>
+                  Card Holder Name *
+                </Label>
                 <Input 
                   id="cardHolderName" 
                   placeholder="e.g., John Doe" 
                   value={formData.cardHolderName}
                   onChange={e => handleFormChange('cardHolderName', e.target.value)}
+                  className={formErrors.cardHolderName ? "border-red-500" : ""}
                 />
+                {formErrors.cardHolderName && (
+                  <p className="text-xs text-red-500 flex items-center mt-1">
+                    <AlertCircle className="h-3 w-3 mr-1" /> {formErrors.cardHolderName}
+                  </p>
+                )}
               </div>
               
               <div className="space-y-2">
@@ -499,46 +593,78 @@ const CardsSection: React.FC<CardsSectionProps> = ({ user }) => {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="cardNumber">Card Number</Label>
+                <Label htmlFor="cardNumber" className={formErrors.cardNumber ? "text-red-500" : ""}>
+                  Card Number *
+                </Label>
                 <Input 
                   id="cardNumber" 
                   placeholder="1234 5678 9012 3456" 
                   maxLength={19}
                   value={formData.cardNumber}
                   onChange={e => handleFormChange('cardNumber', e.target.value)}
+                  className={formErrors.cardNumber ? "border-red-500" : ""}
                 />
+                {formErrors.cardNumber && (
+                  <p className="text-xs text-red-500 flex items-center mt-1">
+                    <AlertCircle className="h-3 w-3 mr-1" /> {formErrors.cardNumber}
+                  </p>
+                )}
               </div>
               
               <div className="grid grid-cols-3 gap-2">
                 <div className="space-y-2">
-                  <Label htmlFor="cvv">CVV</Label>
+                  <Label htmlFor="cvv" className={formErrors.cvv ? "text-red-500" : ""}>
+                    CVV *
+                  </Label>
                   <Input 
                     id="cvv" 
                     placeholder="123" 
                     maxLength={4} 
                     value={formData.cvv}
                     onChange={e => handleFormChange('cvv', e.target.value)}
+                    className={formErrors.cvv ? "border-red-500" : ""}
                   />
+                  {formErrors.cvv && (
+                    <p className="text-xs text-red-500 flex items-center mt-1">
+                      <AlertCircle className="h-3 w-3 mr-1" /> {formErrors.cvv}
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="validFrom">Valid From</Label>
+                  <Label htmlFor="validFrom" className={formErrors.validFrom ? "text-red-500" : ""}>
+                    Valid From *
+                  </Label>
                   <Input 
                     id="validFrom" 
                     placeholder="MM/YY" 
                     maxLength={5} 
                     value={formData.validFrom}
                     onChange={e => handleFormChange('validFrom', e.target.value)}
+                    className={formErrors.validFrom ? "border-red-500" : ""}
                   />
+                  {formErrors.validFrom && (
+                    <p className="text-xs text-red-500 flex items-center mt-1">
+                      <AlertCircle className="h-3 w-3 mr-1" /> {formErrors.validFrom}
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="validTo">Valid To</Label>
+                  <Label htmlFor="validTo" className={formErrors.validTo ? "text-red-500" : ""}>
+                    Valid To *
+                  </Label>
                   <Input 
                     id="validTo" 
                     placeholder="MM/YY" 
                     maxLength={5} 
                     value={formData.validTo}
                     onChange={e => handleFormChange('validTo', e.target.value)}
+                    className={formErrors.validTo ? "border-red-500" : ""}
                   />
+                  {formErrors.validTo && (
+                    <p className="text-xs text-red-500 flex items-center mt-1">
+                      <AlertCircle className="h-3 w-3 mr-1" /> {formErrors.validTo}
+                    </p>
+                  )}
                 </div>
               </div>
               
@@ -561,8 +687,19 @@ const CardsSection: React.FC<CardsSectionProps> = ({ user }) => {
                 </Select>
               </div>
               
-              <Button className="w-full" onClick={handleSaveCard}>
-                {isEditing ? 'Update Card' : 'Save Card'}
+              <Button 
+                className="w-full" 
+                onClick={handleSaveCard} 
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <span className="flex items-center justify-center">
+                    <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+                    {isEditing ? 'Updating...' : 'Saving...'}
+                  </span>
+                ) : (
+                  isEditing ? 'Update Card' : 'Save Card'
+                )}
               </Button>
             </div>
           </DialogContent>

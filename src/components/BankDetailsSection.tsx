@@ -194,10 +194,10 @@ const BankDetailsSection: React.FC<BankDetailsSectionProps> = ({ user }) => {
     try {
       await deleteBankDetail(id, user.id);
       setBankDetails(prev => prev.filter(detail => detail.id !== id));
-      showSuccess('Deleted', 'Bank account removed successfully');
+      showSuccess('Account Deleted', 'Your bank account has been successfully removed from the vault');
     } catch (error) {
       console.error('Failed to delete bank detail:', error);
-      showError('Delete Failed', 'Could not delete the bank account');
+      showError('Delete Failed', 'Unable to delete the bank account. Please try again.');
     }
   };
 
@@ -238,7 +238,7 @@ const BankDetailsSection: React.FC<BankDetailsSectionProps> = ({ user }) => {
           netBankingPassword: bankDetailsToSave.netBankingPassword || undefined,
         } : detail));
         
-        showSuccess('Updated!', 'Bank account updated successfully');
+        showSuccess('Bank Account Updated!', 'Your bank account details have been successfully updated');
       } else {
         // Save new bank detail
         const result = await saveBankDetail(bankDetailsToSave, user.id);
@@ -254,7 +254,7 @@ const BankDetailsSection: React.FC<BankDetailsSectionProps> = ({ user }) => {
           createdAt: new Date()
         }]);
         
-        showSuccess('Saved!', 'New bank account saved securely');
+        showSuccess('Bank Account Saved!', 'Your bank account details have been securely added to your vault');
       }
 
       setShowAddModal(false);

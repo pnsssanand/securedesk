@@ -85,15 +85,15 @@ const VaultSection: React.FC<VaultSectionProps> = ({ user }) => {
   const copyToClipboard = async (text: string, type: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      showSuccess('Copied!', `${type} copied to clipboard`);
+      showSuccess('Copied Successfully!', `${type} has been copied to your clipboard`);
     } catch (err) {
-      showError('Failed to Copy', 'Could not copy to clipboard');
+      showError('Copy Failed', 'Unable to copy to clipboard. Please try again.');
     }
   };
 
   const handleSave = async () => {
     if (!formData.title || !formData.username || !formData.password) {
-      showError('Missing Fields', 'Please fill in all required fields');
+      showError('Missing Required Fields', 'Please fill in title, username, and password to continue');
       return;
     }
 
@@ -123,7 +123,7 @@ const VaultSection: React.FC<VaultSectionProps> = ({ user }) => {
           lastModified: new Date()
         } : p));
         
-        showSuccess('Updated!', 'Password entry updated successfully');
+        showSuccess('Password Updated!', 'Your password has been successfully updated and secured');
       } else {
         // Save new password
         const result = await savePassword(
@@ -148,7 +148,7 @@ const VaultSection: React.FC<VaultSectionProps> = ({ user }) => {
           lastModified: new Date()
         }]);
         
-        showSuccess('Saved!', 'New password entry saved securely');
+        showSuccess('Password Saved!', 'Your new password has been securely added to your vault');
       }
 
       setIsDialogOpen(false);
@@ -156,7 +156,7 @@ const VaultSection: React.FC<VaultSectionProps> = ({ user }) => {
       setFormData({ title: '', url: '', username: '', password: '', notes: '' });
     } catch (error) {
       console.error('Failed to save password:', error);
-      showError('Save Failed', 'Could not save your password');
+      showError('Save Failed', 'Unable to save your password. Please check your connection and try again.');
     }
   };
 
@@ -176,10 +176,10 @@ const VaultSection: React.FC<VaultSectionProps> = ({ user }) => {
     try {
       await deletePassword(id, user.id);
       setPasswords(prev => prev.filter(p => p.id !== id));
-      showSecurity('Deleted', 'Password entry removed from vault');
+      showSecurity('Password Deleted', 'The password entry has been permanently removed from your vault');
     } catch (error) {
       console.error('Failed to delete password:', error);
-      showError('Delete Failed', 'Could not delete the password entry');
+      showError('Delete Failed', 'Unable to delete the password. Please try again.');
     }
   };
 

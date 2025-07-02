@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import EnhancedToast from '@/components/EnhancedToast';
 
@@ -43,7 +42,7 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
     
     setTimeout(() => {
       setToasts(prev => prev.filter(toast => toast.id !== id));
-    }, 4000);
+    }, 6000); // Increased to 6 seconds for better readability
   };
 
   const showSuccess = (title: string, message: string) => showToast('success', title, message);
@@ -66,20 +65,23 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
       showSecurity
     }}>
       {children}
-      <div className="fixed top-4 right-4 z-50 space-y-2">
-        {toasts.map((toast, index) => (
-          <div 
-            key={toast.id}
-            style={{ transform: `translateY(${index * 70}px)` }}
-          >
-            <EnhancedToast
-              type={toast.type}
-              title={toast.title}
-              message={toast.message}
-              onClose={() => removeToast(toast.id)}
-            />
-          </div>
-        ))}
+      {/* Centered toast container with high z-index */}
+      <div className="fixed top-16 inset-x-0 z-[9999] flex items-center justify-center pointer-events-none">
+        <div className="max-w-md w-full pointer-events-auto space-y-4">
+          {toasts.map((toast) => (
+            <div 
+              key={toast.id}
+              className="animate-slide-up"
+            >
+              <EnhancedToast
+                type={toast.type}
+                title={toast.title}
+                message={toast.message}
+                onClose={() => removeToast(toast.id)}
+              />
+            </div>
+          ))}
+        </div>
       </div>
     </ToastContext.Provider>
   );
