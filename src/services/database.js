@@ -15,8 +15,7 @@ import {
   query, 
   where, 
   setDoc,
-  getDoc,
-  onSnapshot
+  getDoc
 } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { auth, db } from '../config/firebase';
@@ -515,104 +514,6 @@ export const deleteDocument = async (document, userId) => {
   }
 };
 
-// Add functions to get counts if they don't already exist
-export const getItemCounts = async (userId) => {
-  try {
-    const passwordsQuery = query(
-      collection(db, 'passwords'),
-      where('userId', '==', userId)
-    );
-    const passwordsSnapshot = await getDocs(passwordsQuery);
-    
-    const cardsQuery = query(
-      collection(db, 'cards'),
-      where('userId', '==', userId)
-    );
-    const cardsSnapshot = await getDocs(cardsQuery);
-    
-    const bankDetailsQuery = query(
-      collection(db, 'bankDetails'),
-      where('userId', '==', userId)
-    );
-    const bankDetailsSnapshot = await getDocs(bankDetailsQuery);
-    
-    const documentsQuery = query(
-      collection(db, 'documents'),
-      where('userId', '==', userId)
-    );
-    const documentsSnapshot = await getDocs(documentsQuery);
-    
-    return {
-      passwords: passwordsSnapshot.size,
-      bankCards: cardsSnapshot.size,
-      bankDetails: bankDetailsSnapshot.size,
-      documents: documentsSnapshot.size
-    };
-  } catch (error) {
-    console.error('Error getting item counts:', error);
-    throw error;
-  }
-};
-
-// New function for real-time item counts
-export const subscribeToItemCounts = (userId, callback) => {
-  if (!userId) return () => {};
-
-  // Set up queries for each collection
-  const passwordsQuery = query(
-    collection(db, 'passwords'),
-    where('userId', '==', userId)
-  );
-  
-  const cardsQuery = query(
-    collection(db, 'cards'),
-    where('userId', '==', userId)
-  );
-  
-  const bankDetailsQuery = query(
-    collection(db, 'bankDetails'),
-    where('userId', '==', userId)
-  );
-  
-  const documentsQuery = query(
-    collection(db, 'documents'),
-    where('userId', '==', userId)
-  );
-  
-  // Set up real-time listeners
-  const unsubscribePasswords = onSnapshot(passwordsQuery, (snapshot) => {
-    callback('passwords', snapshot.size);
-  }, (error) => {
-    console.error('Error in passwords listener:', error);
-  });
-  
-  const unsubscribeCards = onSnapshot(cardsQuery, (snapshot) => {
-    callback('bankCards', snapshot.size);
-  }, (error) => {
-    console.error('Error in cards listener:', error);
-  });
-  
-  const unsubscribeBankDetails = onSnapshot(bankDetailsQuery, (snapshot) => {
-    callback('bankDetails', snapshot.size);
-  }, (error) => {
-    console.error('Error in bank details listener:', error);
-  });
-  
-  const unsubscribeDocuments = onSnapshot(documentsQuery, (snapshot) => {
-    callback('documents', snapshot.size);
-  }, (error) => {
-    console.error('Error in documents listener:', error);
-  });
-  
-  // Return a cleanup function that unsubscribes from all listeners
-  return () => {
-    unsubscribePasswords();
-    unsubscribeCards();
-    unsubscribeBankDetails();
-    unsubscribeDocuments();
-  };
-};
-
 
 export default {
   savePassword,
@@ -631,7 +532,5 @@ export default {
   authenticateUser,
   saveDocument,
   getAllDocuments,
-  deleteDocument,
-  getItemCounts,
-  subscribeToItemCounts
+  deleteDocument
 };

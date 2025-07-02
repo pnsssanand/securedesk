@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import LandingPage from '@/components/LandingPage';
-import Dashboard from '@/components/Dashboard';
+import Dashboard from '@/components/Dashboard.tsx';
 import IntroAnimation from '@/components/IntroAnimation';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { authenticateUser, createUser } from '@/services/database';
